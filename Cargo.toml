@@ -1,0 +1,10 @@
+[package]
+name = "kanban-stale-cards"
+version = "0.1.0"
+edition = "2021"
+description = "Finds the cards that have been sitting longest in their list in a kanban board export"
+license = "MIT"
+
+[[bin]]
+name = "kanban-stale-cards"
+path = "src/main.rs"
