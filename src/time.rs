@@ -59,3 +59,74 @@ pub fn format_duration(total_seconds: i64) -> String {
         format!("{}m", minutes)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_epoch() {
+        assert_eq!(parse_iso8601_utc("1970-01-01T00:00:00Z"), Some(0));
+    }
+
+    #[test]
+    fn parses_known_date_with_millis() {
+        // 2024-01-01T00:00:00Z is 1704067200; add 14 days plus 9:30:00.
+        assert_eq!(
+            parse_iso8601_utc("2024-01-15T09:30:00.000Z"),
+            Some(1_705_311_000)
+        );
+    }
+
+    #[test]
+    fn parses_without_trailing_z() {
+        assert_eq!(
+            parse_iso8601_utc("2024-01-15T09:30:00"),
+            Some(1_705_311_000)
+        );
+    }
+
+    #[test]
+    fn rejects_pre_epoch_dates() {
+        assert_eq!(parse_iso8601_utc("1969-12-31T23:59:59Z"), None);
+    }
+
+    #[test]
+    fn rejects_invalid_month_or_day() {
+        assert_eq!(parse_iso8601_utc("2024-13-01T00:00:00Z"), None);
+        assert_eq!(parse_iso8601_utc("2024-01-32T00:00:00Z"), None);
+        assert_eq!(parse_iso8601_utc("2024-00-01T00:00:00Z"), None);
+    }
+
+    #[test]
+    fn rejects_malformed_strings() {
+        assert_eq!(parse_iso8601_utc("not a date"), None);
+        assert_eq!(parse_iso8601_utc("2024-01-15"), None); // missing time part
+        assert_eq!(parse_iso8601_utc(""), None);
+    }
+
+    #[test]
+    fn format_duration_minutes_only() {
+        assert_eq!(format_duration(0), "0m");
+        assert_eq!(format_duration(59), "0m");
+        assert_eq!(format_duration(60), "1m");
+        assert_eq!(format_duration(45 * 60), "45m");
+    }
+
+    #[test]
+    fn format_duration_hours_and_minutes() {
+        assert_eq!(format_duration(3_600), "1h 0m");
+        assert_eq!(format_duration(3_600 * 2 + 60 * 15), "2h 15m");
+    }
+
+    #[test]
+    fn format_duration_days_and_hours() {
+        assert_eq!(format_duration(86_400), "1d 0h");
+        assert_eq!(format_duration(86_400 * 3 + 3_600 * 6), "3d 6h");
+    }
+
+    #[test]
+    fn format_duration_clamps_negative() {
+        assert_eq!(format_duration(-100), "0m");
+    }
+}

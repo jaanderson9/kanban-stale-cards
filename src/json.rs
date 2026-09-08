@@ -233,3 +233,116 @@ impl Parser {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_primitives() {
+        assert!(matches!(parse("null").unwrap(), Value::Null));
+        assert!(matches!(parse("true").unwrap(), Value::Bool(true)));
+        assert!(matches!(parse("false").unwrap(), Value::Bool(false)));
+        match parse("\"hi\"").unwrap() {
+            Value::String(s) => assert_eq!(s, "hi"),
+            other => panic!("expected string, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_numbers() {
+        let cases = [
+            ("0", 0.0),
+            ("-12", -12.0),
+            ("3.5", 3.5),
+            ("-0.25", -0.25),
+            ("1e3", 1000.0),
+            ("2.5e-2", 0.025),
+        ];
+        for (input, expected) in cases {
+            match parse(input).unwrap() {
+                Value::Number(n) => assert_eq!(n, expected, "input {}", input),
+                other => panic!("expected number for '{}', got {:?}", input, other),
+            }
+        }
+    }
+
+    #[test]
+    fn parses_nested_object_and_array() {
+        let input = r#"{"a": 1, "b": [1, 2, {"c": "d"}], "e": null}"#;
+        let root = parse(input).unwrap();
+        assert!(matches!(root.get("a"), Some(Value::Number(n)) if *n == 1.0));
+        let arr = root.get("b").and_then(Value::as_array).unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[2].get("c").and_then(Value::as_str), Some("d"));
+        assert!(matches!(root.get("e"), Some(Value::Null)));
+        assert!(root.get("missing").is_none());
+    }
+
+    #[test]
+    fn parses_string_escapes() {
+        let input = r#""line1\nline2\t\"quoted\"\\end""#;
+        match parse(input).unwrap() {
+            Value::String(s) => assert_eq!(s, "line1\nline2\t\"quoted\"\\end"),
+            other => panic!("expected string, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_unicode_escape() {
+        let input = "\"\\u00e9\""; // e with acute accent
+        match parse(input).unwrap() {
+            Value::String(s) => assert_eq!(s, "\u{00e9}"),
+            other => panic!("expected string, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parses_surrogate_pair_escape() {
+        // high/low surrogate pair for the grinning face emoji, U+1F600
+        let input = "\"\\ud83d\\ude00\"";
+        match parse(input).unwrap() {
+            Value::String(s) => assert_eq!(s, "\u{1F600}"),
+            other => panic!("expected string, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn as_helpers_reject_wrong_variant() {
+        let s = Value::String("x".to_string());
+        assert_eq!(s.as_str(), Some("x"));
+        assert!(s.as_array().is_none());
+        assert!(s.as_bool().is_none());
+    }
+
+    #[test]
+    fn rejects_trailing_garbage() {
+        assert!(parse("{}garbage").is_err());
+    }
+
+    #[test]
+    fn rejects_unterminated_string() {
+        assert!(parse("\"abc").is_err());
+    }
+
+    #[test]
+    fn rejects_bad_literal() {
+        assert!(parse("nul").is_err());
+    }
+
+    #[test]
+    fn rejects_missing_comma_in_array() {
+        assert!(parse("[1 2]").is_err());
+    }
+
+    #[test]
+    fn rejects_missing_colon_in_object() {
+        assert!(parse(r#"{"a" 1}"#).is_err());
+    }
+
+    #[test]
+    fn empty_array_and_object() {
+        assert!(matches!(parse("[]").unwrap(), Value::Array(v) if v.is_empty()));
+        assert!(matches!(parse("{}").unwrap(), Value::Object(v) if v.is_empty()));
+    }
+}
