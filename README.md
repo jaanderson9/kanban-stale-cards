@@ -51,6 +51,12 @@ Only show the five stalest cards:
 kanban-stale-cards board-export.json --limit 5
 ```
 
+Scope the report to a single list (case-insensitive match on the list name):
+
+```
+kanban-stale-cards board-export.json --list "In Review"
+```
+
 ## How it works
 
 There are no dependencies, so the tool includes its own minimal JSON reader

@@ -11,12 +11,14 @@ struct Args {
     path: String,
     json_output: bool,
     limit: Option<usize>,
+    list_filter: Option<String>,
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut path = None;
     let mut json_output = false;
     let mut limit = None;
+    let mut list_filter = None;
 
     let mut iter = env::args().skip(1);
     while let Some(arg) = iter.next() {
@@ -25,6 +27,10 @@ fn parse_args() -> Result<Args, String> {
             "--limit" => {
                 let n = iter.next().ok_or("--limit requires a number")?;
                 limit = Some(n.parse::<usize>().map_err(|_| "--limit expects a positive integer")?);
+            }
+            "--list" => {
+                let name = iter.next().ok_or("--list requires a list name")?;
+                list_filter = Some(name);
             }
             "-h" | "--help" => {
                 print_usage();
@@ -36,16 +42,17 @@ fn parse_args() -> Result<Args, String> {
     }
 
     let path = path.ok_or("missing path to a board export JSON file")?;
-    Ok(Args { path, json_output, limit })
+    Ok(Args { path, json_output, limit, list_filter })
 }
 
 fn print_usage() {
     println!("kanban-stale-cards - find the cards that have been sitting longest in their list\n");
     println!("USAGE:");
-    println!("    kanban-stale-cards <export.json> [--json] [--limit N]\n");
+    println!("    kanban-stale-cards <export.json> [--json] [--limit N] [--list NAME]\n");
     println!("OPTIONS:");
     println!("    --json         emit machine-readable JSON instead of a table");
     println!("    --limit N      only show the N stalest cards");
+    println!("    --list NAME    only show cards currently in the list NAME (case-insensitive)");
     println!("    -h, --help     show this message");
 }
 
@@ -87,6 +94,10 @@ fn main() {
             process::exit(1);
         }
     };
+
+    if let Some(list_name) = &args.list_filter {
+        cards.retain(|c| c.list_name.eq_ignore_ascii_case(list_name));
+    }
 
     cards.sort_by(|a, b| b.stale_seconds.cmp(&a.stale_seconds));
     if let Some(limit) = args.limit {
