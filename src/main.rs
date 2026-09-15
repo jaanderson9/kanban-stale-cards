@@ -4,11 +4,12 @@ mod time;
 
 use std::env;
 use std::fs;
+use std::io::{self, Read};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 struct Args {
-    path: String,
+    path: Option<String>,
     json_output: bool,
     limit: Option<usize>,
     list_filter: Option<String>,
@@ -41,14 +42,19 @@ fn parse_args() -> Result<Args, String> {
         }
     }
 
-    let path = path.ok_or("missing path to a board export JSON file")?;
+    // no path, or an explicit "-", means read the export from stdin
+    let path = match path {
+        Some(p) if p == "-" => None,
+        other => other,
+    };
     Ok(Args { path, json_output, limit, list_filter })
 }
 
 fn print_usage() {
     println!("kanban-stale-cards - find the cards that have been sitting longest in their list\n");
     println!("USAGE:");
-    println!("    kanban-stale-cards <export.json> [--json] [--limit N] [--list NAME]\n");
+    println!("    kanban-stale-cards [export.json] [--json] [--limit N] [--list NAME]\n");
+    println!("    If export.json is omitted or given as '-', the export is read from stdin.\n");
     println!("OPTIONS:");
     println!("    --json         emit machine-readable JSON instead of a table");
     println!("    --limit N      only show the N stalest cards");
@@ -66,18 +72,30 @@ fn main() {
         }
     };
 
-    let contents = match fs::read_to_string(&args.path) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: could not read '{}': {}", args.path, e);
-            process::exit(1);
+    let (source, contents) = match &args.path {
+        Some(path) => match fs::read_to_string(path) {
+            Ok(c) => (path.clone(), c),
+            Err(e) => {
+                eprintln!("error: could not read '{}': {}", path, e);
+                process::exit(1);
+            }
+        },
+        None => {
+            let mut buf = String::new();
+            match io::stdin().read_to_string(&mut buf) {
+                Ok(_) => ("stdin".to_string(), buf),
+                Err(e) => {
+                    eprintln!("error: could not read board export from stdin: {}", e);
+                    process::exit(1);
+                }
+            }
         }
     };
 
     let root = match json::parse(&contents) {
         Ok(v) => v,
         Err(e) => {
-            eprintln!("error: '{}' is not valid JSON: {}", args.path, e);
+            eprintln!("error: '{}' is not valid JSON: {}", source, e);
             process::exit(1);
         }
     };

@@ -57,6 +57,14 @@ Scope the report to a single list (case-insensitive match on the list name):
 kanban-stale-cards board-export.json --list "In Review"
 ```
 
+Read the export from stdin instead of a file, by omitting the path or passing
+`-`:
+
+```
+curl -s https://api.trello.com/1/boards/abc123?... | kanban-stale-cards
+cat board-export.json | kanban-stale-cards -
+```
+
 ## How it works
 
 There are no dependencies, so the tool includes its own minimal JSON reader
