@@ -40,10 +40,17 @@ Machine-readable output with `--json`:
 ```
 $ kanban-stale-cards board-export.json --json
 [
-  {"card": "Migrate billing to Stripe", "list": "In Review", "entered_at_unix": 1717000000, "stale_seconds": 1234000, "stale_human": "14d 6h"},
-  {"card": "Fix flaky checkout test", "list": "In Progress", "entered_at_unix": 1718100000, "stale_seconds": 530000, "stale_human": "6d 2h"}
+  {"card": "Migrate billing to Stripe", "list": "In Review", "entered_at_unix": 1717000000, "stale_seconds": 1234000, "stale_human": "14d 6h", "approximate": false},
+  {"card": "Fix flaky checkout test", "list": "In Progress", "entered_at_unix": 1718100000, "stale_seconds": 530000, "stale_human": "6d 2h", "approximate": true}
 ]
 ```
+
+`approximate: true` means the export had no `updateCard` action moving the
+card into its current list, so `entered_at` falls back to the card's
+`dateLastActivity` instead. That timestamp also moves if someone edits the
+card without changing lists, so treat it as a rough signal, not a precise
+one. The table output marks the same cards with a trailing `*`, and the tool
+prints a one-line warning to stderr whenever any shown card is approximate.
 
 Only show the five stalest cards:
 

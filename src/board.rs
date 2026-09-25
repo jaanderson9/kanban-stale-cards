@@ -8,6 +8,10 @@ pub struct StaleCard {
     pub list_name: String,
     pub entered_at: u64,
     pub stale_seconds: i64,
+    /// true when `entered_at` came from `dateLastActivity` rather than a
+    /// matching `updateCard` action, i.e. it's an approximation that also
+    /// moves on comments or description edits.
+    pub approximate: bool,
 }
 
 /// Walks a parsed Trello export and, for every open card, works out when it
@@ -103,15 +107,19 @@ pub fn find_stale_cards(root: &Value, now: u64) -> Result<Vec<StaleCard>, String
             .get(list_id)
             .cloned()
             .unwrap_or_else(|| "(unknown list)".to_string());
-        let when = match entered_at.get(&id).copied().or_else(|| last_activity.get(&id).copied()) {
-            Some(w) => w,
-            None => continue, // no timestamp evidence at all, nothing to report
+        let (when, approximate) = match entered_at.get(&id).copied() {
+            Some(w) => (w, false),
+            None => match last_activity.get(&id).copied() {
+                Some(w) => (w, true),
+                None => continue, // no timestamp evidence at all, nothing to report
+            },
         };
         result.push(StaleCard {
             card_name: names.remove(&id).unwrap_or_default(),
             list_name,
             entered_at: when,
             stale_seconds: now as i64 - when as i64,
+            approximate,
         });
     }
 

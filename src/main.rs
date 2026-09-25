@@ -122,6 +122,17 @@ fn main() {
         cards.truncate(limit);
     }
 
+    let approximate_count = cards.iter().filter(|c| c.approximate).count();
+    if approximate_count > 0 {
+        eprintln!(
+            "warning: {} of {} card(s) shown have no matching updateCard action; \
+             their stale time is based on dateLastActivity, which also moves on \
+             comments or edits that don't change the list",
+            approximate_count,
+            cards.len()
+        );
+    }
+
     if args.json_output {
         print_json(&cards);
     } else {
@@ -145,15 +156,26 @@ fn print_table(cards: &[board::StaleCard]) {
         name_width = name_width,
         list_width = list_width
     );
+    let mut any_approximate = false;
     for card in cards {
+        let marker = if card.approximate {
+            any_approximate = true;
+            " *"
+        } else {
+            ""
+        };
         println!(
-            "{:<name_width$}  {:<list_width$}  {}",
+            "{:<name_width$}  {:<list_width$}  {}{}",
             card.card_name,
             card.list_name,
             time::format_duration(card.stale_seconds),
+            marker,
             name_width = name_width,
             list_width = list_width
         );
+    }
+    if any_approximate {
+        println!("\n* estimated from dateLastActivity; no matching action found in the export");
     }
 }
 
@@ -170,7 +192,9 @@ fn print_json(cards: &[board::StaleCard]) {
         out.push_str(&card.stale_seconds.to_string());
         out.push_str(", \"stale_human\": \"");
         out.push_str(&json_escape(&time::format_duration(card.stale_seconds)));
-        out.push_str("\"}");
+        out.push_str("\", \"approximate\": ");
+        out.push_str(if card.approximate { "true" } else { "false" });
+        out.push_str("}");
         if i + 1 < cards.len() {
             out.push(',');
         }
