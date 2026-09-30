@@ -4,13 +4,14 @@ mod time;
 
 use std::env;
 use std::fs;
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::process;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 struct Args {
     path: Option<String>,
     json_output: bool,
+    ndjson_output: bool,
     limit: Option<usize>,
     list_filter: Option<String>,
 }
@@ -18,6 +19,7 @@ struct Args {
 fn parse_args() -> Result<Args, String> {
     let mut path = None;
     let mut json_output = false;
+    let mut ndjson_output = false;
     let mut limit = None;
     let mut list_filter = None;
 
@@ -25,6 +27,7 @@ fn parse_args() -> Result<Args, String> {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--json" => json_output = true,
+            "--ndjson" => ndjson_output = true,
             "--limit" => {
                 let n = iter.next().ok_or("--limit requires a number")?;
                 limit = Some(n.parse::<usize>().map_err(|_| "--limit expects a positive integer")?);
@@ -47,16 +50,20 @@ fn parse_args() -> Result<Args, String> {
         Some(p) if p == "-" => None,
         other => other,
     };
-    Ok(Args { path, json_output, limit, list_filter })
+    if json_output && ndjson_output {
+        return Err("--json and --ndjson cannot be used together".to_string());
+    }
+    Ok(Args { path, json_output, ndjson_output, limit, list_filter })
 }
 
 fn print_usage() {
     println!("kanban-stale-cards - find the cards that have been sitting longest in their list\n");
     println!("USAGE:");
-    println!("    kanban-stale-cards [export.json] [--json] [--limit N] [--list NAME]\n");
+    println!("    kanban-stale-cards [export.json] [--json | --ndjson] [--limit N] [--list NAME]\n");
     println!("    If export.json is omitted or given as '-', the export is read from stdin.\n");
     println!("OPTIONS:");
     println!("    --json         emit machine-readable JSON instead of a table");
+    println!("    --ndjson       emit one JSON object per line instead of a table");
     println!("    --limit N      only show the N stalest cards");
     println!("    --list NAME    only show cards currently in the list NAME (case-insensitive)");
     println!("    -h, --help     show this message");
@@ -133,7 +140,9 @@ fn main() {
         );
     }
 
-    if args.json_output {
+    if args.ndjson_output {
+        print_ndjson(&cards);
+    } else if args.json_output {
         print_json(&cards);
     } else {
         print_table(&cards);
@@ -179,22 +188,41 @@ fn print_table(cards: &[board::StaleCard]) {
     }
 }
 
+fn card_json(card: &board::StaleCard) -> String {
+    let mut out = String::from("{\"card\": \"");
+    out.push_str(&json_escape(&card.card_name));
+    out.push_str("\", \"list\": \"");
+    out.push_str(&json_escape(&card.list_name));
+    out.push_str("\", \"entered_at_unix\": ");
+    out.push_str(&card.entered_at.to_string());
+    out.push_str(", \"stale_seconds\": ");
+    out.push_str(&card.stale_seconds.to_string());
+    out.push_str(", \"stale_human\": \"");
+    out.push_str(&json_escape(&time::format_duration(card.stale_seconds)));
+    out.push_str("\", \"approximate\": ");
+    out.push_str(if card.approximate { "true" } else { "false" });
+    out.push('}');
+    out
+}
+
+// one object per line, no enclosing array, so a consumer can start reading
+// before the whole report is written
+fn print_ndjson(cards: &[board::StaleCard]) {
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+    for card in cards {
+        // a closed pipe (e.g. `| head`) is not worth an error message
+        if writeln!(handle, "{}", card_json(card)).is_err() {
+            return;
+        }
+    }
+}
+
 fn print_json(cards: &[board::StaleCard]) {
     let mut out = String::from("[\n");
     for (i, card) in cards.iter().enumerate() {
-        out.push_str("  {\"card\": \"");
-        out.push_str(&json_escape(&card.card_name));
-        out.push_str("\", \"list\": \"");
-        out.push_str(&json_escape(&card.list_name));
-        out.push_str("\", \"entered_at_unix\": ");
-        out.push_str(&card.entered_at.to_string());
-        out.push_str(", \"stale_seconds\": ");
-        out.push_str(&card.stale_seconds.to_string());
-        out.push_str(", \"stale_human\": \"");
-        out.push_str(&json_escape(&time::format_duration(card.stale_seconds)));
-        out.push_str("\", \"approximate\": ");
-        out.push_str(if card.approximate { "true" } else { "false" });
-        out.push_str("}");
+        out.push_str("  ");
+        out.push_str(&card_json(card));
         if i + 1 < cards.len() {
             out.push(',');
         }

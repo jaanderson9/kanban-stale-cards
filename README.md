@@ -45,6 +45,16 @@ $ kanban-stale-cards board-export.json --json
 ]
 ```
 
+For piping into other tools, `--ndjson` writes the same objects one per line,
+without the enclosing array:
+
+```
+$ kanban-stale-cards board-export.json --ndjson | head -n 1
+{"card": "Migrate billing to Stripe", "list": "In Review", "entered_at_unix": 1717000000, "stale_seconds": 1234000, "stale_human": "14d 6h", "approximate": false}
+```
+
+`--json` and `--ndjson` are mutually exclusive.
+
 `approximate: true` means the export had no `updateCard` action moving the
 card into its current list, so `entered_at` falls back to the card's
 `dateLastActivity` instead. That timestamp also moves if someone edits the
